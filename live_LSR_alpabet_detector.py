@@ -123,10 +123,6 @@ while True:
         current_prediction = ""
         prediction_confidence = 0.0
 
-    # [--- DELETED ---]
-    # I have removed the 'else:' block and the 'if not (results...)'
-    # block that were here, as they were causing the bug.
-    # [--- DELETED ---]
 
     # --- 5. Display FPS ---
     cTime = time.time()
