@@ -140,7 +140,7 @@ while True:
     cv2.rectangle(img, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, PREDICTION_COLOR, FONT_THICKNESS)
 
     # Display the letter only if confidence is above a threshold (e.g., 70%)
-    if prediction_confidence > 0.70:
+    if prediction_confidence > 0.65:
         # Get text size to center it
         text_size = cv2.getTextSize(current_prediction, FONT, FONT_SCALE, FONT_THICKNESS)[0]
         text_x = BOX_TOP_LEFT[0] + (BOX_BOTTOM_RIGHT[0] - BOX_TOP_LEFT[0] - text_size[0]) // 2
