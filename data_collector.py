@@ -13,6 +13,7 @@ mpDraw = mp.solutions.drawing_utils
 cap = cv2.VideoCapture(0)
 pTime = 0
 
+
 # --- CSV Setup ---
 # Define the landmarks to save (all 21 hand landmarks FOR EACH HAND)
 # We will save (21 * 3) + (21 * 3) = 126 columns + 1 'label' column
