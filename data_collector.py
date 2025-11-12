@@ -5,7 +5,7 @@ import os
 import csv
 import numpy as np
 
-# --- Setup ---
+# Setup
 mpHolistic = mp.solutions.holistic
 holistic = mpHolistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mpDraw = mp.solutions.drawing_utils
@@ -14,9 +14,9 @@ cap = cv2.VideoCapture(0)
 pTime = 0
 
 
-# --- CSV Setup ---
-# Define the landmarks to save (all 21 hand landmarks FOR EACH HAND)
-# We will save (21 * 3) + (21 * 3) = 126 columns + 1 'label' column
+# CSV Setup
+# Define the landmarks to save- 21 hand landmarks FOR EACH HAND
+# We will have (21 * 3) + (21 * 3) = 126 columns
 num_landmarks = 21
 base_landmark_names = [f'{i}_{axis}' for i in range(num_landmarks) for axis in ['x', 'y', 'z']]
 # Add prefixes for right and left hands
@@ -51,7 +51,7 @@ while True:
     # Process the image
     results = holistic.process(imgRGB)
 
-    # --- Landmark Extraction and Normalization ---
+    # Landmark Extraction and Normalization
     # Draw right hand
     if results.right_hand_landmarks:
         mpDraw.draw_landmarks(
@@ -70,16 +70,16 @@ while True:
             mpDraw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),  # Green for left
             mpDraw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2))
 
-    # --- FPS Calculation ---
+    # FPS Calculation
     cTime = time.time()
     fps = 1 / (cTime - pTime)
     pTime = cTime
     cv2.putText(img, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
 
-    # --- Check for Key Press ---
+    # Check for Key Press
     key = cv2.waitKey(10) & 0xFF
 
-    if key == ord('='):  # Changed 'fn' to 'q' as ord() requires a single character
+    if key == ord('='):  # '=' key for exiting
         break
 
     # Check if the key is a letter (a-z)
@@ -87,10 +87,10 @@ while True:
         current_label = chr(key)
         print(f"Recording data for: '{current_label}'")
 
-    # --- Save Data ---
+    # Save Data
     if current_label and (results.right_hand_landmarks or results.left_hand_landmarks):
         try:
-            # Helper function to normalize and flatten landmarks
+            # function to normalize and flatten landmarks
             def get_normalized_landmarks(hand_landmarks):
                 if not hand_landmarks:
                     # Return a flat list of 63 zeros if hand is not detected
@@ -122,10 +122,7 @@ while True:
                 csv_writer.writerow([current_label] + row_data)
 
             # Reset label after saving one frame to avoid saving duplicates
-            # (Hold the key down to record multiple frames)
-            # For continuous saving, remove the line below
             print(f"Saved frame for '{current_label}'")
-            # To save continuously while holding, comment out the next line
             current_label = None
 
         except Exception as e:
