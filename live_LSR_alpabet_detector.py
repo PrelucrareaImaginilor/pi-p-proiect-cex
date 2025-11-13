@@ -4,6 +4,11 @@ import time
 import numpy as np
 import joblib
 import pandas as pd
+import warnings
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # Suppress TensorFlow INFO/WARNING/ERROR
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 model_file_name = 'rsl_model.pkl'
 feature_file_name = 'rsl_features.joblib'
