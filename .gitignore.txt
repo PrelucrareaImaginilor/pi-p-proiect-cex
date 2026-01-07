@@ -1,0 +1,6 @@
+.venv/
+*.pkl
+*.h5
+*.task
+*.csv
+*.joblib
