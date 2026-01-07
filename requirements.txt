@@ -1,3 +1,14 @@
+# --- Apple Silicon Optimization ---
+# Base TensorFlow optimized for macOS (ARM64)
+tensorflow-macos==2.15.0
+
+# GPU acceleration plugin for Metal (M1/M2/M3/M4)
+tensorflow-metal==1.1.0
+
+# MediaPipe for hand/pose tracking
+mediapipe==0.10.9
+
+# Standard dependencies
 opencv-python
 mediapipe==0.10.9
 scikit-learn
@@ -5,5 +16,4 @@ pandas
 joblib
 absl-py
 numpy<2.0.0
-tensorflow==2.15.0
 protobuf==3.20.3

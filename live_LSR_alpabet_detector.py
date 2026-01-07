@@ -23,7 +23,11 @@ except FileNotFoundError as e:
 print("Model loaded successfully.")
 
 mpHolistic = mp.solutions.holistic
-holistic = mpHolistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+holistic = mpHolistic.Holistic(min_detection_confidence=0.5,
+                                min_tracking_confidence=0.5,
+                                model_complexity=1,       # 0=Fast, 1=Balanced, 2=Accurate (Slow)
+                                refine_face_landmarks=False # Keep False for speed
+)
 mpDraw = mp.solutions.drawing_utils
 
 cap = cv2.VideoCapture(0)
