@@ -104,7 +104,7 @@ def main():
     print(f"Frames per clip: {sequence_length}")
     print("Press SPACE to record a sequence. Press 'q' to quit.")
 
-    with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+    with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=2) as holistic:
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret: break

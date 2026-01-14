@@ -1,137 +1,83 @@
-# --- Suppress Warnings ---
-import warnings
-import os
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-try:
-    from absl import logging
-
-    logging.set_verbosity(logging.ERROR)
-except ImportError:
-    pass
-# -------------------------
-
 import cv2
+import mediapipe as mp
 import numpy as np
-import os
 import joblib
 import pandas as pd
-import mediapipe as mp
-import time
+import os
 from tensorflow.keras.models import load_model
 
-# ==========================================
-#        1. LOAD MODELS & CONFIG
-# ==========================================
+# --- ENVIRONMENT CONFIGURATION ---
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs
 
-print("\n--- LOADING RSL SYSTEMS ---")
+# --- SETUP MEDIAPIPE ---
+mp_holistic = mp.solutions.holistic
+mp_drawing = mp.solutions.drawing_utils
 
-# --- A. Static Model (LSR Letters) ---
+# =============================================================================
+# 1. LOAD STATIC MODEL (Alphabet Detector)
+# =============================================================================
+print("Loading Static Model (Alphabet)...")
 static_model = None
 static_features = None
 static_scaler = None
 
 try:
-    # We need ALL three files for the RSL letter detector to work
-    if os.path.exists('rsl_model.pkl') and os.path.exists('rsl_scaler.pkl') and os.path.exists('rsl_features.joblib'):
+    if os.path.exists('rsl_model.pkl') and os.path.exists('rsl_features.joblib'):
         static_model = joblib.load('rsl_model.pkl')
         static_features = joblib.load('rsl_features.joblib')
-        static_scaler = joblib.load('rsl_scaler.pkl')
-        print("[OK] Static Mode (LSR Letters) Ready.")
+        if os.path.exists('rsl_scaler.pkl'):
+            static_scaler = joblib.load('rsl_scaler.pkl')
+        print("Success: Static model loaded.")
     else:
-        print("[WARNING] Static files missing. Run '2_train_model.py' to generate them.")
+        print("Warning: Static model files not found.")
 except Exception as e:
-    print(f"[ERROR] Failed to load Static RSL model: {e}")
+    print(f"Error loading static model: {e}")
 
-# --- B. Dynamic Model (Words/Sentences) ---
+# =============================================================================
+# 2. LOAD DYNAMIC MODEL (Sequence/Word Detector)
+# =============================================================================
+print("Loading Dynamic Model (Sequence)...")
 dynamic_model = None
 actions = []
-sequence_length = 30  # Default, will be updated by model input shape
+max_length = 30  # Default value
+
+DATA_PATH = os.path.join('MP_Data_Improved')
+MODEL_PATH = 'rsl_improved_model.h5'
+META_PATH = 'model_meta.npy'
 
 try:
-    if os.path.exists('rsl_sequence_model.h5'):
-        dynamic_model = load_model('rsl_sequence_model.h5')
+    if os.path.exists(DATA_PATH):
+        actions = np.array([name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))])
 
-        # Auto-detect sequence length (usually 30 or 60)
-        sequence_length = dynamic_model.input_shape[1]
-        print(f"[OK] Dynamic Mode (Words) Ready. Sequence length: {sequence_length}")
-
-        # Load Labels from MP_Data folder
-        DATA_PATH = os.path.join('MP_Data')
-        if os.path.exists(DATA_PATH):
-            actions = np.array([name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))])
-            print(f"     Classes: {actions}")
-        else:
-            print("[WARNING] MP_Data folder not found. Dynamic labels might be wrong.")
+    if os.path.exists(MODEL_PATH) and os.path.exists(META_PATH):
+        dynamic_model = load_model(MODEL_PATH)
+        max_length = int(np.load(META_PATH)[0])
+        print(f"Success: Dynamic model loaded. Sequence length: {max_length}")
+        dynamic_model.predict(np.zeros((1, max_length, 258)), verbose=0)  # Warmup
     else:
-        print("[WARNING] 'rsl_sequence_model.h5' not found. Dynamic mode disabled.")
+        print(f"Warning: Dynamic model files not found.")
 except Exception as e:
-    print(f"[ERROR] Failed to load Dynamic model: {e}")
-
-# ==========================================
-#        2. HELPER FUNCTIONS
-# ==========================================
-
-mp_holistic = mp.solutions.holistic
-mp_drawing = mp.solutions.drawing_utils
+    print(f"Error loading dynamic model: {e}")
 
 
-def draw_styled_landmarks(image, results):
-    # Draw Face Mesh
-    mp_drawing.draw_landmarks(
-        image, results.face_landmarks, mp_holistic.FACEMESH_TESSELATION,
-        mp_drawing.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1),
-        mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1)
-    )
-    # Draw Pose
-    mp_drawing.draw_landmarks(
-        image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
-        mp_drawing.DrawingSpec(color=(80, 22, 10), thickness=2, circle_radius=4),
-        mp_drawing.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
-    )
-    # Draw Left Hand
-    mp_drawing.draw_landmarks(
-        image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-        mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-        mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
-    )
-    # Draw Right Hand
-    mp_drawing.draw_landmarks(
-        image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-        mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=4),
-        mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
-    )
+# =============================================================================
+# 3. HELPER FUNCTIONS
+# =============================================================================
+
+def get_static_features(hand_landmarks):
+    if not hand_landmarks:
+        return [0.0] * (21 * 3)
+    landmarks_list = hand_landmarks.landmark
+    wrist = [landmarks_list[0].x, landmarks_list[0].y, landmarks_list[0].z]
+    normalized = []
+    for lm in landmarks_list:
+        normalized.append(lm.x - wrist[0])
+        normalized.append(lm.y - wrist[1])
+        normalized.append(lm.z - wrist[2])
+    return normalized
 
 
-# --- Feature Extraction for Static (Letters) ---
-# Normalizes relative to wrist
-def get_static_features(results):
-    def get_normalized(hand_landmarks):
-        if not hand_landmarks:
-            return [0.0] * (21 * 3)
-        landmarks_list = hand_landmarks.landmark
-        wrist = [landmarks_list[0].x, landmarks_list[0].y, landmarks_list[0].z]
-        normalized = []
-        for lm in landmarks_list:
-            normalized.append(lm.x - wrist[0])
-            normalized.append(lm.y - wrist[1])
-            normalized.append(lm.z - wrist[2])
-        return normalized
-
-    right = get_normalized(results.right_hand_landmarks)
-    left = get_normalized(results.left_hand_landmarks)
-    return right + left
-
-
-# --- Feature Extraction for Dynamic (Words) ---
-# Raw flattened coordinates including face/pose
 def extract_dynamic_keypoints(results):
-    if results.face_landmarks:
-        face = np.array([[res.x, res.y, res.z] for res in results.face_landmarks.landmark]).flatten()
-    else:
-        face = np.zeros(468 * 3)
     if results.pose_landmarks:
         pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten()
     else:
@@ -144,190 +90,195 @@ def extract_dynamic_keypoints(results):
         rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten()
     else:
         rh = np.zeros(21 * 3)
-    return np.concatenate([pose, face, lh, rh])
+    return np.concatenate([pose, lh, rh])
 
 
-# --- Visualization for Words ---
-def prob_viz(res, actions, input_frame, colors):
-    output_frame = input_frame.copy()
-    for num, prob in enumerate(res):
-        cv2.rectangle(output_frame, (0, 60 + num * 40), (int(prob * 100), 90 + num * 40), colors[num % len(colors)], -1)
-        cv2.putText(output_frame, actions[num], (0, 85 + num * 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2,
-                    cv2.LINE_AA)
-    return output_frame
+# =============================================================================
+# 4. MAIN APPLICATION
+# =============================================================================
 
-
-# ==========================================
-#        3. MAIN APPLICATION LOOP
-# ==========================================
-
-cap = cv2.VideoCapture(0)
-
-# Modes
+# Config
 MODE_STATIC = 0
 MODE_DYNAMIC = 1
 current_mode = MODE_STATIC
 
-# Toggles
-show_landmarks = True
-show_fps = True
-
-# Static Variables
-static_pred = ""
-static_conf = 0.0
+# Visuals
 BOX_TOP_LEFT = (20, 150)
 BOX_BOTTOM_RIGHT = (120, 250)
-FONT_STATIC = cv2.FONT_HERSHEY_SIMPLEX
+STATIC_COLOR = (255, 0, 0)  # Blue
+DYNAMIC_COLOR = (245, 117, 16)  # Orange
+BAR_COLOR = (50, 50, 50)  # Dark Grey
 
-# Dynamic Variables
-sequence = []
-sentence = []
-predictions = []
+# Buffers
+sequence = []  # Dynamic model input
+sentence_history = ""  # Main history string (Raw Text)
+last_dynamic_token = ""  # To prevent "Hello Hello" spam in dynamic mode
+
+dynamic_predictions = []  # Stabilization
+static_predictions = []  # Stabilization
 threshold = 0.8
-colors = [(245, 117, 16), (117, 245, 16), (16, 117, 245), (200, 100, 200), (100, 200, 200)] * 5
 
-pTime = 0
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 print("\n--- CONTROLS ---")
-print("  m : Switch Mode (Static <-> Dynamic)")
-print("  h : Toggle Landmarks")
-print("  f : Toggle FPS")
-print("  q : Quit")
+print(" [SPACEBAR] : Toggle Mode (Adds space if entering Dynamic)")
+print(" [c]        : Clear History")
+print(" [q]        : Quit")
+print("----------------")
 
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=2) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
 
-        # --- Handle Key Inputs ---
-        key = cv2.waitKey(5) & 0xFF
-        if key == ord('q'): break
-        if key == ord('h'): show_landmarks = not show_landmarks
-        if key == ord('f'): show_fps = not show_fps
-        if key == ord('m'):
-            current_mode = 1 - current_mode  # Switch between 0 and 1
-            sequence = []  # Reset sequence buffer on switch
-            print(f"Switched to mode: {'DYNAMIC (Words)' if current_mode == MODE_DYNAMIC else 'STATIC (Letters)'}")
+        # --- INPUT HANDLING ---
+        key = cv2.waitKey(10) & 0xFF
+        if key == ord('q'):
+            break
 
-        # --- Process Image ---
-        frame = cv2.flip(frame, 1)
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image.flags.writeable = False
-        results = holistic.process(image)
-        image.flags.writeable = True
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        if key == 32:  # Spacebar
+            current_mode = 1 - current_mode
+            sequence = []  # Reset dynamic buffer
+            static_predictions = []  # Reset static buffer
 
-        # --- Draw Landmarks ---
-        if show_landmarks:
-            draw_styled_landmarks(image, results)
+            # REQUIREMENT: "when i move to dynamic put a space next"
+            #if current_mode == MODE_DYNAMIC:
+            sentence_history += " "
 
-        # =================================================
-        #        MODE 0: STATIC (RSL LETTERS)
-        # =================================================
+            print(f"Switched to {'DYNAMIC' if current_mode == MODE_DYNAMIC else 'STATIC'} mode")
+
+        if key == ord('c'):
+            sentence_history = ""
+            last_dynamic_token = ""
+            print("History Cleared")
+
+        # --- PROCESS IMAGE ---
+        image = cv2.flip(frame, 1)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_rgb.flags.writeable = False
+        results = holistic.process(image_rgb)
+        image_rgb.flags.writeable = True
+
+        # --- DRAW LANDMARKS ---
+        if results.right_hand_landmarks:
+            mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+        if results.left_hand_landmarks:
+            mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+        if current_mode == MODE_DYNAMIC:
+            mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+
+        # ==========================
+        # STATIC MODE LOGIC
+        # ==========================
         if current_mode == MODE_STATIC:
-            if static_model and static_scaler:
+            current_letter = ""
+            conf = 0.0
+
+            if static_model:
                 try:
-                    # 1. Extract Features (Wrist-Relative)
-                    features = get_static_features(results)
+                    rh_data = get_static_features(results.right_hand_landmarks)
+                    lh_data = get_static_features(results.left_hand_landmarks)
+                    input_data = rh_data + lh_data
 
-                    # 2. Check Compatibility
-                    if len(features) != len(static_features):
-                        # Shape mismatch (e.g., using old model with new logic)
-                        pass
+                    input_df = pd.DataFrame([input_data], columns=static_features)
+                    if static_scaler:
+                        input_df = static_scaler.transform(input_df)
+
+                    if not pd.DataFrame([input_data]).empty and np.any(np.array(input_data) != 0):
+                        pred = static_model.predict(input_df)[0]
+                        conf = np.max(static_model.predict_proba(input_df))
+                        current_letter = pred
+
+                        # --- STATIC STABILIZATION ---
+                        if conf > 0.75:
+                            static_predictions.append(current_letter)
+                            static_predictions = static_predictions[-8:]  # Keep last 8
+
+                            # If stable for 8 frames
+                            if len(static_predictions) == 8 and len(set(static_predictions)) == 1:
+                                stable_char = static_predictions[0]
+
+                                # REQUIREMENT: "letters with no space"
+                                # We treat the alphabet as a typewriter.
+                                # Simple Debounce: Don't add if it was the *immediately* previous addition
+                                # (unless user clears buffer by moving hand, which the buffer reset handles below)
+
+                                sentence_history += stable_char
+
+                                # Clear buffer so we don't add 'A' 100 times a second
+                                # User must hold pose -> Add -> Move/Shake/Wait -> Add again
+                                static_predictions = []
                     else:
-                        # 3. Scale & Predict
-                        input_df = pd.DataFrame([features], columns=static_features)
-                        input_scaled = static_scaler.transform(input_df)
-
-                        if not input_df.empty and np.any(input_df.values != 0):
-                            pred = static_model.predict(input_scaled)[0]
-                            prob = np.max(static_model.predict_proba(input_scaled))
-
-                            static_pred = pred
-                            static_conf = prob
-                        else:
-                            static_pred = ""
-                            static_conf = 0.0
-
-                        # 4. Draw UI
-                        if static_conf > 0.65:
-                            # Box
-                            cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, (255, 255, 255), cv2.FILLED)
-                            cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, (255, 0, 0), 5)
-                            # Letter
-                            text_size = cv2.getTextSize(static_pred, FONT_STATIC, 3, 5)[0]
-                            text_x = BOX_TOP_LEFT[0] + (BOX_BOTTOM_RIGHT[0] - BOX_TOP_LEFT[0] - text_size[0]) // 2
-                            text_y = BOX_BOTTOM_RIGHT[1] - (BOX_BOTTOM_RIGHT[1] - BOX_TOP_LEFT[1] - text_size[1]) // 2
-                            cv2.putText(image, static_pred, (text_x, text_y), FONT_STATIC, 3, (255, 0, 0), 5)
-
-                        # Conf Text
-                        cv2.putText(image, f'{int(static_conf * 100)}%', (BOX_TOP_LEFT[0], BOX_TOP_LEFT[1] - 10),
-                                    cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+                        static_predictions = []
 
                 except Exception as e:
-                    # e.g., if hands are not visible, scaler might throw minor warning
                     pass
-            else:
-                cv2.putText(image, "Static Model Missing", (20, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
 
+            # Static UI
+            cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, (255, 255, 255), cv2.FILLED)
+            cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, STATIC_COLOR, 5)
+            if conf > 0.65:
+                text_size = cv2.getTextSize(current_letter, cv2.FONT_HERSHEY_SIMPLEX, 3, 5)[0]
+                text_x = BOX_TOP_LEFT[0] + (BOX_BOTTOM_RIGHT[0] - BOX_TOP_LEFT[0] - text_size[0]) // 2
+                text_y = BOX_BOTTOM_RIGHT[1] - (BOX_BOTTOM_RIGHT[1] - BOX_TOP_LEFT[1] - text_size[1]) // 2
+                cv2.putText(image, current_letter, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 3, STATIC_COLOR, 5)
 
-        # =================================================
-        #        MODE 1: DYNAMIC (WORDS)
-        # =================================================
+            cv2.putText(image, "MODE: STATIC", (20, 450), cv2.FONT_HERSHEY_PLAIN, 2, STATIC_COLOR, 2)
+
+        # ==========================
+        # DYNAMIC MODE LOGIC
+        # ==========================
         elif current_mode == MODE_DYNAMIC:
             if dynamic_model:
-                # 1. Extract Features (Raw Flattened)
                 keypoints = extract_dynamic_keypoints(results)
                 sequence.append(keypoints)
-                sequence = sequence[-sequence_length:]  # Keep buffer at correct length
+                sequence = sequence[-max_length:]
 
-                if len(sequence) == sequence_length:
-                    try:
-                        # 2. Predict
-                        res = dynamic_model.predict(np.expand_dims(sequence, axis=0), verbose=0)[0]
-                        best_idx = np.argmax(res)
-                        best_label = actions[best_idx]
-                        confidence = res[best_idx]
+                hands_present = results.left_hand_landmarks or results.right_hand_landmarks
+                if hands_present and len(sequence) >= 15:
+                    input_pad = np.expand_dims(sequence, axis=0)
+                    pad_amt = max_length - len(sequence)
+                    if pad_amt > 0:
+                        input_pad = np.pad(input_pad, ((0, 0), (0, pad_amt), (0, 0)), mode='constant')
 
-                        # 3. Stabilization
-                        predictions.append(best_idx)
-                        if np.unique(predictions[-10:])[0] == best_idx:
-                            if confidence > threshold:
-                                if len(sentence) > 0:
-                                    if best_label != sentence[-1]:
-                                        sentence.append(best_label)
-                                else:
-                                    sentence.append(best_label)
+                    res = dynamic_model.predict(input_pad, verbose=0)[0]
+                    best_idx = np.argmax(res)
+                    conf = res[best_idx]
 
-                        if len(sentence) > 5:
-                            sentence = sentence[-5:]
+                    if conf > threshold:
+                        dynamic_predictions.append(best_idx)
+                        if len(dynamic_predictions) > 10:
+                            dynamic_predictions = dynamic_predictions[-10:]
 
-                        # 4. Viz
-                        image = prob_viz(res, actions, image, colors)
-                    except Exception as e:
-                        pass
+                        if len(dynamic_predictions) >= 10 and np.unique(dynamic_predictions)[0] == best_idx:
+                            current_word = actions[best_idx]
 
-                # Sentence Bar
-                cv2.rectangle(image, (0, 0), (640, 40), (245, 117, 16), -1)
-                cv2.putText(image, ' '.join(sentence), (3, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            else:
-                cv2.putText(image, "Dynamic Model Missing", (20, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
+                            # Prevent immediate repetition (standard dynamic behavior)
+                            if current_word != last_dynamic_token:
+                                # REQUIREMENT: "between words in the dynamic mode i want spaces"
+                                # Check if we need to insert a space before this word
+                                if len(sentence_history) > 0 and not sentence_history.endswith(" "):
+                                    sentence_history += " "
 
-        # --- Top UI (Mode Indicator) ---
-        mode_text = "MODE: DYNAMIC (Words)" if current_mode == MODE_DYNAMIC else "MODE: STATIC (LSR)"
-        color = (245, 117, 16) if current_mode == MODE_DYNAMIC else (255, 0, 0)
-        cv2.putText(image, mode_text, (320, 30 if current_mode == MODE_STATIC else 70), cv2.FONT_HERSHEY_PLAIN, 1.5,
-                    color, 2)
+                                sentence_history += current_word
+                                last_dynamic_token = current_word
 
-        # --- FPS Counter ---
-        cTime = time.time()
-        fps = 1 / (cTime - pTime)
-        pTime = cTime
-        if show_fps:
-            cv2.putText(image, f'FPS: {int(fps)}', (500, 450), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+            cv2.putText(image, "MODE: DYNAMIC", (20, 450), cv2.FONT_HERSHEY_PLAIN, 2, DYNAMIC_COLOR, 2)
 
-        cv2.imshow('RSL Combined Detector', image)
+        # ==========================
+        # TOP PREDICTION BAR
+        # ==========================
+        cv2.rectangle(image, (0, 0), (640, 40), BAR_COLOR, -1)
+
+        # Display tail of history (approx last 30 chars to fit screen)
+        text_to_show = sentence_history[-30:]
+
+        cv2.putText(image, text_to_show, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(image, "Press 'c' to Clear", (450, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+        cv2.imshow('Unified Detector', image)
 
 cap.release()
 cv2.destroyAllWindows()
