@@ -10,7 +10,7 @@ mp_drawing_styles = mp.solutions.drawing_styles
 
 # --- Configuration ---
 DATA_PATH = os.path.join('MP_Data_Improved')  # New folder to avoid mixing with old data
-FPS = 30
+FPS = 15
 
 
 def mediapipe_detection(image, model):

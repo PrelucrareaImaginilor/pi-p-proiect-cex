@@ -107,8 +107,9 @@ early_stop = EarlyStopping(monitor='loss', patience=30, restore_best_weights=Tru
 
 model.fit(
     X_train, y_train,
-    epochs=100,  # Transformerele învață repede, 200 ar trebui să fie destul
+    epochs=200,
     batch_size=32,
+    validation_data=(X_test, y_test), # <--- AICI folosim efectiv split-ul
     callbacks=[tb_callback, early_stop]
 )
 

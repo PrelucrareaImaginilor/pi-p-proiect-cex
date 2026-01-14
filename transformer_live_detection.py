@@ -69,6 +69,44 @@ def extract_keypoints(results):
     return np.concatenate([pose, lh, rh])
 
 
+# Adaugă funcția asta la începutul scriptului, după importuri
+
+def check_hands_active(results):
+    """
+    Verifică dacă mâinile sunt ridicate suficient pentru a fi considerate active.
+    Returnează False dacă mâinile sunt jos sau nedetectate.
+    """
+    # 1. Dacă MediaPipe nu vede nicio mână, e clar IDLE
+    if not results.left_hand_landmarks and not results.right_hand_landmarks:
+        return False
+
+    # 2. Verificare geometrică: Mâinile sunt sub șolduri?
+    # Luăm poziția șoldurilor (Landmarks 23 și 24)
+    if results.pose_landmarks:
+        left_hip = results.pose_landmarks.landmark[23]
+        right_hip = results.pose_landmarks.landmark[24]
+        hip_level = (left_hip.y + right_hip.y) / 2
+
+        # Verificăm mâna stângă
+        hands_down = True
+        if results.left_hand_landmarks:
+            # Luăm încheietura (landmark 0)
+            lh_wrist_y = results.left_hand_landmarks.landmark[0].y
+            if lh_wrist_y < hip_level:  # În MediaPipe, y mai mic înseamnă mai sus
+                hands_down = False
+
+        # Verificăm mâna dreaptă
+        if results.right_hand_landmarks:
+            rh_wrist_y = results.right_hand_landmarks.landmark[0].y
+            if rh_wrist_y < hip_level:
+                hands_down = False
+
+        if hands_down:
+            return False  # Mâinile sunt detectate, dar sunt jos lângă corp
+
+    return True
+
+
 def mediapipe_detection(image, model):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image.flags.writeable = False
@@ -97,14 +135,14 @@ def prob_viz(res, actions, input_frame, colors):
 sequence = []
 sentence = []
 predictions = []
-threshold = 0.8
+threshold = 0.85
 
 colors = [(245, 117, 16), (117, 245, 16), (16, 117, 245)] * 5
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.6, model_complexity=1) as holistic:
+with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.6, model_complexity=2) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
@@ -123,9 +161,10 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
 
         # --- PREDICȚIE ---
         hands_present = results.left_hand_landmarks or results.right_hand_landmarks
+        is_active = check_hands_active(results)
 
         # Predicție doar dacă avem secvența plină SAU suntem în modul idle/activ
-        if len(sequence) == max_length:
+        if len(sequence) == max_length and (hands_present or is_active):
             input_data = np.expand_dims(sequence, axis=0)
             res = model.predict(input_data, verbose=0)[0]
 
