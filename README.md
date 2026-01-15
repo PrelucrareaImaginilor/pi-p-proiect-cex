@@ -1,7 +1,8 @@
 # Detecția și recunoașterea limbajului semnelor din imagini/ secvențe video
 CEX, Epure Carla-Maria și Velnic Vlad-Andrei
 
-# 1. Hand Gesture Recognition using Image Processing and Feature Extraction Techniques - Ashish Sharma, Anmol Mittal, Savitoj Singh, Vasudev Awatramani
+# 1. Analiza contextului proiectului
+## 1.1 Hand Gesture Recognition using Image Processing and Feature Extraction Techniques - Ashish Sharma, Anmol Mittal, Savitoj Singh, Vasudev Awatramani
 
 Aplicație/ Domeniu: Recunoașterea gesturilor mâinii pentru interpretarea Limbajului American al Semnelor (ASL) prin imagini statice. Se urmărește accesibilizarea limbajului semnelor, utilizatorii nefiind nevoiți să aibă cunoștințe în prealabil.
 
@@ -16,7 +17,7 @@ Limitări: Implementarea recunoaște doar gesturi statice. Sistemul nu a fost te
 Comentarii: Bază bună pentru proiect, descrie limitările care trebuie depășite și metodologii cu rezultate bune pentru imagini statice. Poate fi extins pentru componenta de analiză video, alături de utilizarea rețelelor neuronale.
 
 
-# 2. Alphabet Recognition of Sign Language Using Machine Learning - AVINASH KUMAR SHARMA, ABHYUDAYA MITTAL, AASHNA KAPOOR, ADITI TIWARI
+## 1.2 Alphabet Recognition of Sign Language Using Machine Learning - AVINASH KUMAR SHARMA, ABHYUDAYA MITTAL, AASHNA KAPOOR, ADITI TIWARI
 
 Domeniu: Recunoașterea limbajului semnelor atât pentru ASL, cât și pentru ISL- Indian Sign Language. Se dorește captarea gesturilor și transformarea acestora în text și sunet.
 
@@ -31,7 +32,7 @@ Limitări: Incapacitatea sistemului de a recunoaște cuvinte întregi, ci doar l
 Comentarii: Articolul are o relevanță ridicată pentru proiectul nostru deoarece se folosește un model deja antrenat care atinge o rată de acuratețe foarte bună. Se poate extinde cu analiza secvențelor video.
 
 
-# 3. A Comprehensive Review of Sign Language Recognition: Different Types, Modalities, and Datasets- M. MADHIARASAN, PARTHA PRATIM ROY
+## 1.3 A Comprehensive Review of Sign Language Recognition: Different Types, Modalities, and Datasets- M. MADHIARASAN, PARTHA PRATIM ROY
 
 Domeniu: Lucrarea reprezinta o analiză a realizărilor în domeniul recunoașterii limbajului semnelor, tehnologiile utilizate, separarea lor pe fiecare dialect și segregarea lor în recunoaștere izolată sau continuă.
 
@@ -46,7 +47,7 @@ Limitări: Printre limitări se numără lipsa unor seturi de date mari și vari
 Comentarii: Lucrarea subliniază că domeniul este în continuă dezvoltare, fiind necesare dataseturi mai bune și modele multimodale mai robuste. Din această lucrare tragem concluzia că vom fi limitați de metoda de achiziție de date, deoarece vom folosi doar camera video.
 
 
-# 4. Application of transfer learning to sign language recognition using an inflated 3D deep convolutional neural network- ROMAN TOENGI
+## 1.4 Application of transfer learning to sign language recognition using an inflated 3D deep convolutional neural network- ROMAN TOENGI
 
 Domeniu: Lucrarea tratează recunoașterea limbajului semnelor cu accent pe aplicarea transferului de învățare la recunoașterea semnelor izolate din diferite limbi, în contextul inteligenței artificiale și viziunii computerizate.
 
@@ -61,7 +62,7 @@ Limitari: Este subliniată dependența rezultatului final de natura datelor de p
 Comentarii: Rezultatele demonstrează avantajele transfer learning-ului, dar si nevoia de fine tuning pe data set-uri specifice fiecarui dialect. Lucrarea este relevantă pentru adaptarea unui model pre-antrenat pentru ASL la unul specific LSR.
 
 
-# 5. Score-level Multi Cue Fusion for Sign Language Recognition- Cagrı Gokce,  Ogulcan Ozdemir, Ahmet Alp Kındıroglu, Lale Akarun
+## 1.5 Score-level Multi Cue Fusion for Sign Language Recognition- Cagrı Gokce,  Ogulcan Ozdemir, Ahmet Alp Kındıroglu, Lale Akarun
 
 Domeniu: Lucrarea se concentrează pe recunoașterea limbajului semnelor izolate prin analiza vizuală și fuzionarea multiplilor indicatori, în special pentru limba semnelor turcești, în domeniul viziunii computerizate și recunoașterii acțiunilor vizuale Sign Language Recognition﻿.
 
@@ -77,7 +78,7 @@ Comentarii: Studiul sugerează că pentru a îmbunătăți recunoașterea, este 
 
 
 
-## Proiectarea soluţiei:
+# 2. Proiectarea soluţiei:
 
 Ca și abordare inițială vom analiza doar imaginile statice. Din articolele studiate, am extras cei mai importanți pași pentru realizarea unui program de recunoaștere a limbajului semnelor. 
 
@@ -97,3 +98,49 @@ Etape cheie:
 5. Postprocesarea și recunoașterea: Convertește rezultatele modelului în eticheta corespunzătoare literei. 
 6. Afișare rezultat: Posibilitatea de a salva output-ul într-un fișier separat, conversie în vorbire.
 
+# 3. Evoluția Proiectului și Arhitecturi de Modelare
+Inițial, proiectul a pornit de la analiza imaginilor statice, însă pentru a capta natura dinamică a limbajului semnelor (LSR), am evoluat către modele capabile să proceseze secvențe temporale.
+
+## 3.1 Trecerea de la Random Forest (RFC) la LSTM
+Prima iterație a sistemului (model_trainer.py) a utilizat un model Random Forest Classifier (RFC).
+
+Abordare: Modelul primea coordonatele (landmarks) dintr-un singur cadru și clasifica litera.
+
+Limitare: Deși eficient pentru alfabetul static (ex: litera 'A'), modelul nu putea recunoaște gesturi care implică mișcare sau context temporal.
+
+Pentru a rezolva această problemă, am implementat LSTM (Long Short-Term Memory) în sequence_trainer.py. Această rețea neuronală recurentă permite modelului să „își amintească” cadrele anterioare, fiind ideală pentru date de tip serie temporală (secvențe de landmarks).
+
+## 3.2 Optimizarea: LSTM Bidirecțional și Corecții Hardware
+În faza a doua, am îmbunătățit arhitectura prin utilizarea straturilor Bidirectional LSTM.
+
+Avantaj: Modelul procesează secvența de gesturi atât de la început la sfârșit, cât și invers, captând mai bine contextul mișcării.
+
+Critical Fix (Mac M-Series): În timpul antrenării pe hardware Apple Silicon, am identificat o problemă de instabilitate (NaN errors). Soluția a fost schimbarea funcției de activare din relu în tanh pentru straturile LSTM, asigurând stabilitatea gradienților.
+
+## 3.3 Experimentul cu Modelul Transformer
+Ultima etapă de cercetare a implicat implementarea unei arhitecturi de tip Transformer (transformer_trainer.py), tehnologia care stă la baza modelelor moderne de limbaj.
+
+Configurația aleasă:
+
+Proiecție și Positional Encoding: Deoarece Transformer-ul nu are o noțiune nativă de ordine (spre deosebire de LSTM), am adăugat un strat de Embedding pentru a marca poziția fiecărui cadru în secvență.
+
+Multi-Head Attention: Modelul utilizează mecanisme de atenție pentru a identifica automat care momente dintr-o mișcare sunt cele mai relevante pentru un anumit semn.
+
+Global Average Pooling: Pentru a agrega informația din întreaga secvență înainte de clasificarea finală.
+
+Concluzie tehnică: În timp ce LSTM-ul s-a dovedit robust pentru secvențe scurte și medii, modelul Transformer oferă un potențial mai mare de scalare pentru propoziții complexe în limbajul semnelor, deși necesită o gestionare mai atentă a hiperparametrilor și a volumului de date.
+
+# 4. Structura Finală a Soluției Software
+Colectarea datelor: 
+data_collector.py (static) și sequence_collector.py (secvențe .npy)
+
+Antrenare: 
+model_trainer.py -> Model RFC (.pkl)
+
+sequence_trainer.py -> Model LSTM (.h5)
+
+transformer_trainer.py -> Model Transformer (.keras)
+
+Detecție Live: 
+Scripturi dedicate pentru fiecare tip de model (live_LSR_alphabet_detector.py, sequence_live_detector.py, transformer_live_detection.py) care utilizează camera web pentru feedback în timp real.
+Scriptul combined_detector.py care face ofera 
