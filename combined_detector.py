@@ -6,17 +6,13 @@ import pandas as pd
 import os
 from tensorflow.keras.models import load_model
 
-# --- ENVIRONMENT CONFIGURATION ---
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# --- SETUP MEDIAPIPE ---
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
-# =============================================================================
-# 1. LOAD STATIC MODEL (Alphabet Detector)
-# =============================================================================
-print("Loading Static Model (Alphabet)...")
+# incarcare model static
+print("Loading static model...")
 static_model = None
 static_features = None
 static_scaler = None
@@ -33,13 +29,11 @@ try:
 except Exception as e:
     print(f"Error loading static model: {e}")
 
-# =============================================================================
-# 2. LOAD DYNAMIC MODEL (Sequence/Word Detector)
-# =============================================================================
-print("Loading Dynamic Model (Sequence)...")
+# incarcare model dinamic
+print("Loading dynamic model...")
 dynamic_model = None
 actions = []
-max_length = 30  # Default value
+max_length = 30
 
 DATA_PATH = os.path.join('MP_Data_Improved')
 MODEL_PATH = 'rsl_improved_model.h5'
@@ -53,16 +47,14 @@ try:
         dynamic_model = load_model(MODEL_PATH)
         max_length = int(np.load(META_PATH)[0])
         print(f"Success: Dynamic model loaded. Sequence length: {max_length}")
-        dynamic_model.predict(np.zeros((1, max_length, 258)), verbose=0)  # Warmup
+        dynamic_model.predict(np.zeros((1, max_length, 258)), verbose=0)  # warmup
     else:
         print(f"Warning: Dynamic model files not found.")
 except Exception as e:
     print(f"Error loading dynamic model: {e}")
 
 
-# =============================================================================
-# 3. HELPER FUNCTIONS
-# =============================================================================
+# functii helper
 
 def get_static_features(hand_landmarks):
     if not hand_landmarks:
@@ -93,9 +85,7 @@ def extract_dynamic_keypoints(results):
     return np.concatenate([pose, lh, rh])
 
 
-# =============================================================================
-# 4. MAIN APPLICATION
-# =============================================================================
+# aplicatie principala
 
 # Config
 MODE_STATIC = 0
@@ -105,46 +95,44 @@ current_mode = MODE_STATIC
 # Visuals
 BOX_TOP_LEFT = (20, 150)
 BOX_BOTTOM_RIGHT = (120, 250)
-STATIC_COLOR = (255, 0, 0)  # Blue
-DYNAMIC_COLOR = (245, 117, 16)  # Orange
-BAR_COLOR = (50, 50, 50)  # Dark Grey
+STATIC_COLOR = (255, 0, 0)
+DYNAMIC_COLOR = (245, 117, 16)
+BAR_COLOR = (50, 50, 50)
 
 # Buffers
-sequence = []  # Dynamic model input
-sentence_history = ""  # Main history string (Raw Text)
-last_dynamic_token = ""  # To prevent "Hello Hello" spam in dynamic mode
+sequence = []
+sentence_history = ""
+last_dynamic_token = ""
 
-dynamic_predictions = []  # Stabilization
-static_predictions = []  # Stabilization
+dynamic_predictions = []
+static_predictions = []
 threshold = 0.8
 
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-print("\n--- CONTROLS ---")
-print(" [SPACEBAR] : Toggle Mode (Adds space if entering Dynamic)")
-print(" [c]        : Clear History")
-print(" [q]        : Quit")
-print("----------------")
+print("\n--CONTROLS--")
+print(" [SPACEBAR] : Toggle mode")
+print(" [c]        : Clear history")
+print(" [q]        : Quit\n")
 
 with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=2) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
 
-        # --- INPUT HANDLING ---
+        # input uri tastatura
         key = cv2.waitKey(10) & 0xFF
         if key == ord('q'):
             break
 
-        if key == 32:  # Spacebar
+        if key == 32:  # SPACEBAR
             current_mode = 1 - current_mode
-            sequence = []  # Reset dynamic buffer
-            static_predictions = []  # Reset static buffer
+            sequence = []
+            static_predictions = []
 
-            # REQUIREMENT: "when i move to dynamic put a space next"
-            #if current_mode == MODE_DYNAMIC:
+            # spatiu pt switch din static-dinamic
             sentence_history += " "
 
             print(f"Switched to {'DYNAMIC' if current_mode == MODE_DYNAMIC else 'STATIC'} mode")
@@ -152,16 +140,16 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
         if key == ord('c'):
             sentence_history = ""
             last_dynamic_token = ""
-            print("History Cleared")
+            print("History cleared")
 
-        # --- PROCESS IMAGE ---
+        # procesare imagine
         image = cv2.flip(frame, 1)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image_rgb.flags.writeable = False
         results = holistic.process(image_rgb)
         image_rgb.flags.writeable = True
 
-        # --- DRAW LANDMARKS ---
+        # landmark uri vizuale
         if results.right_hand_landmarks:
             mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
         if results.left_hand_landmarks:
@@ -169,9 +157,7 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
         if current_mode == MODE_DYNAMIC:
             mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
 
-        # ==========================
-        # STATIC MODE LOGIC
-        # ==========================
+        # mod static
         if current_mode == MODE_STATIC:
             current_letter = ""
             conf = 0.0
@@ -191,24 +177,15 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                         conf = np.max(static_model.predict_proba(input_df))
                         current_letter = pred
 
-                        # --- STATIC STABILIZATION ---
                         if conf > 0.75:
                             static_predictions.append(current_letter)
-                            static_predictions = static_predictions[-8:]  # Keep last 8
+                            static_predictions = static_predictions[-8:]
 
-                            # If stable for 8 frames
+                            # daca pozitia e stabila pt 8 frame uri
                             if len(static_predictions) == 8 and len(set(static_predictions)) == 1:
                                 stable_char = static_predictions[0]
 
-                                # REQUIREMENT: "letters with no space"
-                                # We treat the alphabet as a typewriter.
-                                # Simple Debounce: Don't add if it was the *immediately* previous addition
-                                # (unless user clears buffer by moving hand, which the buffer reset handles below)
-
                                 sentence_history += stable_char
-
-                                # Clear buffer so we don't add 'A' 100 times a second
-                                # User must hold pose -> Add -> Move/Shake/Wait -> Add again
                                 static_predictions = []
                     else:
                         static_predictions = []
@@ -216,7 +193,6 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                 except Exception as e:
                     pass
 
-            # Static UI
             cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, (255, 255, 255), cv2.FILLED)
             cv2.rectangle(image, BOX_TOP_LEFT, BOX_BOTTOM_RIGHT, STATIC_COLOR, 5)
             if conf > 0.65:
@@ -227,9 +203,7 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
 
             cv2.putText(image, "MODE: STATIC", (20, 450), cv2.FONT_HERSHEY_PLAIN, 2, STATIC_COLOR, 2)
 
-        # ==========================
-        # DYNAMIC MODE LOGIC
-        # ==========================
+        # mod dinamic
         elif current_mode == MODE_DYNAMIC:
             if dynamic_model:
                 keypoints = extract_dynamic_keypoints(results)
@@ -255,10 +229,8 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                         if len(dynamic_predictions) >= 10 and np.unique(dynamic_predictions)[0] == best_idx:
                             current_word = actions[best_idx]
 
-                            # Prevent immediate repetition (standard dynamic behavior)
+                            # prevenire repetitii
                             if current_word != last_dynamic_token:
-                                # REQUIREMENT: "between words in the dynamic mode i want spaces"
-                                # Check if we need to insert a space before this word
                                 if len(sentence_history) > 0 and not sentence_history.endswith(" "):
                                     sentence_history += " "
 
@@ -267,12 +239,9 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
 
             cv2.putText(image, "MODE: DYNAMIC", (20, 450), cv2.FONT_HERSHEY_PLAIN, 2, DYNAMIC_COLOR, 2)
 
-        # ==========================
-        # TOP PREDICTION BAR
-        # ==========================
+
         cv2.rectangle(image, (0, 0), (640, 40), BAR_COLOR, -1)
 
-        # Display tail of history (approx last 30 chars to fit screen)
         text_to_show = sentence_history[-30:]
 
         cv2.putText(image, text_to_show, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)

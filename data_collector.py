@@ -14,19 +14,16 @@ cap = cv2.VideoCapture(0)
 pTime = 0
 
 
-# CSV Setup
-# Define the landmarks to save- 21 hand landmarks FOR EACH HAND
-# We will have (21 * 3) + (21 * 3) = 126 columns
+# 21 landmark uri pentru fiecare mana
+# (21 * 3) + (21 * 3) = 126 coloane
 num_landmarks = 21
 base_landmark_names = [f'{i}_{axis}' for i in range(num_landmarks) for axis in ['x', 'y', 'z']]
-# Add prefixes for right and left hands
+
 landmark_names = [f'right_{name}' for name in base_landmark_names] + [f'left_{name}' for name in base_landmark_names]
 csv_header = ['label'] + landmark_names
 
-# CSV file to save the data
 csv_file_name = 'rsl_landmarks.csv'
 
-# Create the file and write the header if it doesn't exist
 if not os.path.exists(csv_file_name):
     with open(csv_file_name, mode='w', newline='') as f:
         csv_writer = csv.writer(f)
@@ -42,17 +39,12 @@ while True:
     if not success:
         continue
 
-    # Flip the image horizontally for a later selfie-view display
     img = cv2.flip(img, 1)
 
-    # Convert to RGB
     imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # Process the image
     results = holistic.process(imgRGB)
 
-    # Landmark Extraction and Normalization
-    # Draw right hand
     if results.right_hand_landmarks:
         mpDraw.draw_landmarks(
             img,
@@ -61,7 +53,6 @@ while True:
             mpDraw.DrawingSpec(color=(255, 0, 255), thickness=2, circle_radius=2),
             mpDraw.DrawingSpec(color=(255, 0, 255), thickness=2, circle_radius=2))
 
-    # Draw left hand
     if results.left_hand_landmarks:
         mpDraw.draw_landmarks(
             img,
@@ -70,35 +61,32 @@ while True:
             mpDraw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),  # Green for left
             mpDraw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2))
 
-    # FPS Calculation
+    # calculc FPS
     cTime = time.time()
     fps = 1 / (cTime - pTime)
     pTime = cTime
     cv2.putText(img, f'FPS: {int(fps)}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
 
-    # Check for Key Press
+    # salvare tasta apasata
     key = cv2.waitKey(10) & 0xFF
 
-    if key == ord('='):  # '=' key for exiting
+    if key == ord('='):  # '=' iesire
         break
 
-    # Check if the key is a letter (a-z)
     if key >= ord('a') and key <= ord('z'):
         current_label = chr(key)
         print(f"Recording data for: '{current_label}'")
 
-    # Save Data
+    # salavre date
     if current_label and (results.right_hand_landmarks or results.left_hand_landmarks):
         try:
-            # function to normalize and flatten landmarks
+            # normalizare landmark uri relativa la incheietura
             def get_normalized_landmarks(hand_landmarks):
                 if not hand_landmarks:
-                    # Return a flat list of 63 zeros if hand is not detected
                     return [0.0] * (num_landmarks * 3)
 
                 landmarks_list = hand_landmarks.landmark
 
-                # Normalize relative to the wrist (landmark 0)
                 wrist = [landmarks_list[0].x, landmarks_list[0].y, landmarks_list[0].z]
 
                 normalized_landmarks = []
@@ -109,26 +97,21 @@ while True:
                 return normalized_landmarks
 
 
-            # Get landmarks for both hands
             right_hand_data = get_normalized_landmarks(results.right_hand_landmarks)
             left_hand_data = get_normalized_landmarks(results.left_hand_landmarks)
 
-            # Combine all landmarks into one row
             row_data = right_hand_data + left_hand_data
 
-            # 3. Save to CSV
             with open(csv_file_name, mode='a', newline='') as f:
                 csv_writer = csv.writer(f)
                 csv_writer.writerow([current_label] + row_data)
 
-            # Reset label after saving one frame to avoid saving duplicates
             print(f"Saved frame for '{current_label}'")
             current_label = None
 
         except Exception as e:
             print(f"Error processing landmarks: {e}")
 
-    # Display the current recording label
     if current_label:
         cv2.putText(img, f'RECORDING: {current_label}', (20, 120), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3)
 

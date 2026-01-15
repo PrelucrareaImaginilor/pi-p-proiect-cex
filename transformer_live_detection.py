@@ -5,50 +5,44 @@ import mediapipe as mp
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-# --- Setup MediaPipe ---
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
-# --- CONFIGURARE ---
 DATA_PATH = os.path.join('MP_Data_Improved')
-MODEL_PATH = 'transformer_model.keras'  # Formatul nou
+MODEL_PATH = 'transformer_model.keras'
 META_PATH = 'model_meta.npy'
-IDLE_LABEL = 'idle'  # <--- IMPORTANT: Scrie aici exact numele folderului tău de repaus (ex: 'nimic', 'idle')
+IDLE_LABEL = 'idle'
 
-# 1. Încărcare Etichete
+
 try:
     actions = np.array([name for name in os.listdir(DATA_PATH) if os.path.isdir(os.path.join(DATA_PATH, name))])
 except FileNotFoundError:
-    print(f"Eroare: Folderul {DATA_PATH} nu a fost găsit.")
+    print(f"Eroare: Folderul {DATA_PATH} nu a fost gasit.")
     actions = []
 
-# 2. Încărcare Model
 if not os.path.exists(MODEL_PATH) or not os.path.exists(META_PATH):
     print("Eroare: Modelul sau metadata lipsesc.")
     exit()
 
-print("Se încarcă modelul Transformer...")
+print("Se incarca modelul Transformer...")
 try:
     model = load_model(MODEL_PATH)
 except Exception as e:
-    print(f"Eroare la încărcare: {e}")
-    # Fallback pentru versiuni mai vechi sau incompatibilități
+    print(f"Eroare la incarcare: {e}")
     model = load_model(MODEL_PATH, custom_objects={
         "MultiHeadAttention": tf.keras.layers.MultiHeadAttention,
         "LayerNormalization": tf.keras.layers.LayerNormalization
     })
 
 max_length = int(np.load(META_PATH)[0])
-print(f"Model încărcat. Lungime secvență: {max_length}")
+print(f"Model incarcat. Lungime secventa: {max_length}")
 
-# --- WARM-UP ---
 print("Warming up...")
 dummy_input = np.zeros((1, max_length, 258))
-model.predict(dummy_input, verbose=0)
+model.predict(dummy_input, verbose=0) # predictie fortata pentru warm-up
 print("Sistem gata!")
 
 
-# ---------------------------------------
 
 def extract_keypoints(results):
     if results.pose_landmarks:
@@ -69,40 +63,29 @@ def extract_keypoints(results):
     return np.concatenate([pose, lh, rh])
 
 
-# Adaugă funcția asta la începutul scriptului, după importuri
 
 def check_hands_active(results):
-    """
-    Verifică dacă mâinile sunt ridicate suficient pentru a fi considerate active.
-    Returnează False dacă mâinile sunt jos sau nedetectate.
-    """
-    # 1. Dacă MediaPipe nu vede nicio mână, e clar IDLE
     if not results.left_hand_landmarks and not results.right_hand_landmarks:
         return False
 
-    # 2. Verificare geometrică: Mâinile sunt sub șolduri?
-    # Luăm poziția șoldurilor (Landmarks 23 și 24)
     if results.pose_landmarks:
         left_hip = results.pose_landmarks.landmark[23]
         right_hip = results.pose_landmarks.landmark[24]
         hip_level = (left_hip.y + right_hip.y) / 2
 
-        # Verificăm mâna stângă
         hands_down = True
         if results.left_hand_landmarks:
-            # Luăm încheietura (landmark 0)
             lh_wrist_y = results.left_hand_landmarks.landmark[0].y
-            if lh_wrist_y < hip_level:  # În MediaPipe, y mai mic înseamnă mai sus
+            if lh_wrist_y < hip_level:
                 hands_down = False
 
-        # Verificăm mâna dreaptă
         if results.right_hand_landmarks:
             rh_wrist_y = results.right_hand_landmarks.landmark[0].y
             if rh_wrist_y < hip_level:
                 hands_down = False
 
         if hands_down:
-            return False  # Mâinile sunt detectate, dar sunt jos lângă corp
+            return False
 
     return True
 
@@ -122,7 +105,6 @@ def prob_viz(res, actions, input_frame, colors):
         if num >= len(actions): break
         if np.isnan(prob): continue
 
-        # Facem bara gri dacă e acțiunea "idle"
         color = (100, 100, 100) if actions[num] == IDLE_LABEL else colors[num % len(colors)]
 
         cv2.rectangle(output_frame, (0, 60 + num * 40), (int(prob * 100), 90 + num * 40), color, -1)
@@ -131,7 +113,6 @@ def prob_viz(res, actions, input_frame, colors):
     return output_frame
 
 
-# --- Logică Principală ---
 sequence = []
 sentence = []
 predictions = []
@@ -142,7 +123,7 @@ cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.6, model_complexity=2) as holistic:
+with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.6, model_complexity=1) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
@@ -150,20 +131,16 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
         frame = cv2.flip(frame, 1)
         image, results = mediapipe_detection(frame, holistic)
 
-        # Desenare landmarks (opțional, poți comenta liniile astea pentru viteză)
         mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
         mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
 
-        # 2. Extragere Keypoints
         keypoints = extract_keypoints(results)
         sequence.append(keypoints)
         sequence = sequence[-max_length:]
 
-        # --- PREDICȚIE ---
         hands_present = results.left_hand_landmarks or results.right_hand_landmarks
         is_active = check_hands_active(results)
 
-        # Predicție doar dacă avem secvența plină SAU suntem în modul idle/activ
         if len(sequence) == max_length and (hands_present or is_active):
             input_data = np.expand_dims(sequence, axis=0)
             res = model.predict(input_data, verbose=0)[0]
@@ -172,17 +149,13 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
             confidence = res[best_idx]
             current_action_name = actions[best_idx]
 
-            # Vizualizare
             image = prob_viz(res, actions, image, colors)
 
             if confidence > threshold:
                 predictions.append(best_idx)
 
-                # Logică de stabilizare (ultimele 10 frame-uri identice)
                 if np.unique(predictions[-10:])[0] == best_idx:
-
-                    # --- MODIFICARE AICI: FILTRARE IDLE ---
-                    # Dacă acțiunea curentă stabilă NU este 'idle', o procesăm pentru afișare
+                    # afisare actiune doar daca nu e IDLE
                     if current_action_name != IDLE_LABEL:
 
                         if len(sentence) > 0:
@@ -191,21 +164,14 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                         else:
                             sentence.append(current_action_name)
 
-                    # Dacă este 'idle', nu facem nimic (nu adăugăm la sentence),
-                    # dar faptul că 'predictions' s-a umplut cu indexul de idle
-                    # asigură că nu se repetă ultimul cuvânt valid.
 
             if len(sentence) > 5:
                 sentence = sentence[-5:]
 
-        # 3. UI Display
-        # Caseta portocalie de sus
         cv2.rectangle(image, (0, 0), (640, 40), (245, 117, 16), -1)
 
-        # Afișăm propoziția
         cv2.putText(image, ' '.join(sentence), (3, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-        # Instrucțiuni
         cv2.putText(image, "Press 'c' to Clear", (450, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         cv2.imshow('Transformer Live Detector', image)
