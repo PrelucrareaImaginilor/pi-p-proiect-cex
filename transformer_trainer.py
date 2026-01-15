@@ -92,11 +92,11 @@ model.summary()
 log_dir = os.path.join('logs', 'fit')
 tb_callback = TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-early_stop = EarlyStopping(monitor='loss', patience=30, restore_best_weights=True)
+early_stop = EarlyStopping(monitor='loss', patience=100, restore_best_weights=True)
 
 model.fit(
     X_train, y_train,
-    epochs=200,
+    epochs=400,
     batch_size=32,
     validation_data=(X_test, y_test),
     callbacks=[tb_callback, early_stop]

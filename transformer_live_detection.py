@@ -123,7 +123,7 @@ cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.6, model_complexity=1) as holistic:
+with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=1) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break

@@ -117,7 +117,7 @@ print(" [SPACEBAR] : Toggle mode")
 print(" [c]        : Clear history")
 print(" [q]        : Quit\n")
 
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=2) as holistic:
+with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=1) as holistic:
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
@@ -230,7 +230,7 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
                             current_word = actions[best_idx]
 
                             # prevenire repetitii
-                            if current_word != last_dynamic_token:
+                            if current_word != last_dynamic_token and current_word!= 'idle':
                                 if len(sentence_history) > 0 and not sentence_history.endswith(" "):
                                     sentence_history += " "
 
