@@ -40,11 +40,11 @@ model.add(Dense(32, activation='relu'))
 model.add(Dense(actions.shape[0], activation='softmax'))
 
 model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-early_stop = EarlyStopping(monitor='val_loss', patience=100, restore_best_weights=True)
+early_stop = EarlyStopping(monitor='val_loss', patience=1000, restore_best_weights=True)
 model.fit(
     X_train,
     y_train,
-    epochs=1000,
+    epochs=5000,
     validation_data=(X_test, y_test),
     callbacks=[TensorBoard(log_dir='logs'), early_stop]
 )

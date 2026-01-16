@@ -125,9 +125,9 @@ print(f"Average Inference Time per Sequence: {avg_inference_time*1000:.2f} ms")
 loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
 print(f"Test Set Accuracy: {accuracy * 100:.2f}%")
 
-y_pred_probs = model.predict(X_train, verbose=0)
+y_pred_probs = model.predict(X_test, verbose=0)
 y_pred = np.argmax(y_pred_probs, axis=1)
-y_true = np.argmax(y_train, axis=1)
+y_true = np.argmax(y_test, axis=1)
 
 print("\nClassification Report:")
 print(classification_report(y_true, y_pred, target_names=actions))
